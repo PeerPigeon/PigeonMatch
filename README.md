@@ -5,7 +5,7 @@ The matchmaking and collaboration engine for PeerPigeon - a versatile solution f
 ## Features
 
 - 🎮 **Flexible Matchmaking**: Configure minimum and maximum peer counts (2 or more peers)
-- 🌐 **Network Namespace Support**: Isolate different peer groups in separate network namespaces
+- 🌐 **Network Namespace Support**: Uses PeerPigeon's native namespace isolation for separate peer networks
 - ⏱️ **Vector Clock Arbitration**: Resolve conflicts and handle latency issues in distributed systems
 - 🔄 **State Synchronization**: Automatic state synchronization across peers
 - ⚡ **Vue/Vite Compatible**: Built with Vue 3 and Vite support by default
@@ -114,23 +114,33 @@ clock1.merge(clock2);
 
 ### Network Namespaces
 
+PigeonMatch leverages PeerPigeon's native network namespace support for isolating peer groups. Create separate PeerPigeon mesh instances with different `networkName` configurations:
+
 ```typescript
-import { NamespaceManager } from 'pigeonmatch';
+import { PeerPigeonMesh } from 'peerpigeon';
+import { MatchmakingEngine } from 'pigeonmatch';
 
-// Create a namespace manager
-const manager = new NamespaceManager();
+// Create isolated mesh networks using PeerPigeon's native namespace support
+const gameMesh = new PeerPigeonMesh({ networkName: 'game-lobby' });
+const chatMesh = new PeerPigeonMesh({ networkName: 'chat-room' });
 
-// Create or get namespaces
-const gameNamespace = manager.getOrCreateNamespace('game-lobby');
-const chatNamespace = manager.getOrCreateNamespace('chat-room');
+await gameMesh.connect('ws://localhost:3000');
+await chatMesh.connect('ws://localhost:3000');
 
-// Add peers to namespaces
-gameNamespace.addPeer('peer-1', { /* peer data */ });
-chatNamespace.addPeer('peer-2', { /* peer data */ });
+// Create matchmaking engines for each namespace
+const gameMatchmaker = new MatchmakingEngine({
+  minPeers: 2,
+  maxPeers: 4,
+  namespace: 'game-lobby'  // Used for match identification
+});
 
-// Check peer counts
-console.log('Game lobby peers:', gameNamespace.getPeerCount());
-console.log('Chat room peers:', chatNamespace.getPeerCount());
+const chatMatchmaker = new MatchmakingEngine({
+  minPeers: 2,
+  maxPeers: 10,
+  namespace: 'chat-room'
+});
+
+// Peers in different PeerPigeon meshes won't see each other
 ```
 
 ## API Reference
@@ -260,7 +270,7 @@ export default {
 PigeonMatch uses a combination of proven distributed systems concepts:
 
 1. **Vector Clocks**: Track causality and detect concurrent events
-2. **Network Namespaces**: Isolate different peer groups
+2. **PeerPigeon Network Namespaces**: Leverage PeerPigeon's native namespace isolation for separate peer groups
 3. **Event-Driven Architecture**: React to state changes and peer events
 4. **Conflict Resolution Strategies**: Multiple strategies for handling conflicts
 

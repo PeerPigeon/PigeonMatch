@@ -1,6 +1,5 @@
 import EventEmitter from 'eventemitter3';
 import { VectorClock } from './VectorClock';
-import { NetworkNamespace, NamespaceManager } from './NetworkNamespace';
 import {
   MatchmakingConfig,
   MatchmakingEvent,
@@ -10,13 +9,15 @@ import {
 
 /**
  * MatchmakingEngine handles peer matching and group formation
+ * 
+ * Note: For network namespace isolation, create separate PeerPigeon mesh instances
+ * with different `networkName` configurations. This engine manages peer matching
+ * within a single namespace.
  */
 export class MatchmakingEngine extends EventEmitter {
   private config: Required<MatchmakingConfig>;
   private peers: Map<string, Peer>;
   private matches: Map<string, MatchGroup>;
-  private namespaceManager: NamespaceManager;
-  private namespace: NetworkNamespace;
   private matchQueue: Peer[];
   private matchCounter: number;
 
@@ -34,8 +35,6 @@ export class MatchmakingEngine extends EventEmitter {
     this.matches = new Map();
     this.matchQueue = [];
     this.matchCounter = 0;
-    this.namespaceManager = new NamespaceManager();
-    this.namespace = this.namespaceManager.getOrCreateNamespace(this.config.namespace);
   }
 
   /**
@@ -56,7 +55,6 @@ export class MatchmakingEngine extends EventEmitter {
     peer.vectorClock.increment(peer.id);
 
     this.peers.set(peer.id, peer);
-    this.namespace.addPeer(peer.id, peer);
     this.matchQueue.push(peer);
 
     this.emit(MatchmakingEvent.PEER_JOINED, peer);
@@ -75,7 +73,6 @@ export class MatchmakingEngine extends EventEmitter {
     }
 
     this.peers.delete(peerId);
-    this.namespace.removePeer(peerId);
     
     // Remove from queue
     const queueIndex = this.matchQueue.findIndex(p => p.id === peerId);
@@ -249,6 +246,5 @@ export class MatchmakingEngine extends EventEmitter {
     this.peers.clear();
     this.matches.clear();
     this.matchQueue = [];
-    this.namespace.clear();
   }
 }

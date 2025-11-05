@@ -2,12 +2,14 @@
  * PigeonMatch - Matchmaking and Collaboration Engine for PeerPigeon
  * 
  * A versatile matchmaking and collaboration engine built on top of peerpigeon
- * with network namespace support, configurable peer counts, and vector clock
- * arbitration for distributed systems.
+ * with vector clock arbitration for distributed systems.
+ * 
+ * Note: Network namespace isolation is provided by PeerPigeon's native support.
+ * Create separate PeerPigeon mesh instances with different `networkName` configurations
+ * for isolated peer networks.
  */
 
 export { VectorClock } from './VectorClock';
-export { NetworkNamespace, NamespaceManager } from './NetworkNamespace';
 export { MatchmakingEngine } from './MatchmakingEngine';
 export { CollaborationEngine } from './CollaborationEngine';
 

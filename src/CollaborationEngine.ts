@@ -1,6 +1,5 @@
 import EventEmitter from 'eventemitter3';
 import { VectorClock } from './VectorClock';
-import { NetworkNamespace, NamespaceManager } from './NetworkNamespace';
 import {
   CollaborationConfig,
   CollaborationEvent,
@@ -14,6 +13,10 @@ import {
 
 /**
  * CollaborationEngine handles state synchronization and conflict resolution
+ * 
+ * Note: For network namespace isolation, create separate PeerPigeon mesh instances
+ * with different `networkName` configurations. This engine manages collaboration
+ * within a single namespace.
  */
 export class CollaborationEngine extends EventEmitter {
   private config: Required<CollaborationConfig>;
@@ -21,8 +24,7 @@ export class CollaborationEngine extends EventEmitter {
   private peerClocks: Map<string, VectorClock>;
   private localState: any;
   private peerStates: Map<string, any>;
-  private namespaceManager: NamespaceManager;
-  private namespace: NetworkNamespace;
+  private peers: Map<string, Peer>;
   private syncTimer?: number;
   private messageHandlers: Map<MessageType, (message: PeerMessage) => void>;
 
@@ -39,8 +41,7 @@ export class CollaborationEngine extends EventEmitter {
     this.peerClocks = new Map();
     this.localState = {};
     this.peerStates = new Map();
-    this.namespaceManager = new NamespaceManager();
-    this.namespace = this.namespaceManager.getOrCreateNamespace(this.config.namespace);
+    this.peers = new Map();
     this.messageHandlers = new Map();
 
     this.setupMessageHandlers();
@@ -220,8 +221,11 @@ export class CollaborationEngine extends EventEmitter {
    * Handle heartbeat from a peer
    */
   private handlePeerHeartbeat(message: PeerMessage): void {
-    // Update peer's last seen time
-    this.namespace.setMetadata(`${message.from}:lastSeen`, Date.now());
+    // Update peer's last seen time in local tracking
+    const peer = this.peers.get(message.from);
+    if (peer && peer.metadata) {
+      peer.metadata.lastSeen = Date.now();
+    }
   }
 
   /**
@@ -326,8 +330,7 @@ export class CollaborationEngine extends EventEmitter {
    * Broadcast a message to all peers
    */
   private broadcastMessage(message: PeerMessage): void {
-    const peerIds = this.namespace.getPeerIds();
-    for (const peerId of peerIds) {
+    for (const peerId of this.peers.keys()) {
       if (peerId !== this.config.peerId) {
         const targetMessage = { ...message, to: peerId };
         this.sendMessage(targetMessage);
@@ -346,20 +349,20 @@ export class CollaborationEngine extends EventEmitter {
   }
 
   /**
-   * Add a peer to the collaboration namespace
+   * Add a peer to the collaboration
    */
   addPeer(peer: Peer): void {
-    this.namespace.addPeer(peer.id, peer);
+    this.peers.set(peer.id, peer);
     if (peer.vectorClock) {
       this.peerClocks.set(peer.id, peer.vectorClock);
     }
   }
 
   /**
-   * Remove a peer from the collaboration namespace
+   * Remove a peer from the collaboration
    */
   removePeer(peerId: string): void {
-    this.namespace.removePeer(peerId);
+    this.peers.delete(peerId);
     this.peerClocks.delete(peerId);
     this.peerStates.delete(peerId);
   }
@@ -386,6 +389,6 @@ export class CollaborationEngine extends EventEmitter {
     this.removeAllListeners();
     this.peerClocks.clear();
     this.peerStates.clear();
-    this.namespace.clear();
+    this.peers.clear();
   }
 }
