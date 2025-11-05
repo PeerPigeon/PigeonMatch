@@ -23,7 +23,7 @@ export class CollaborationEngine extends EventEmitter {
   private peerStates: Map<string, any>;
   private namespaceManager: NamespaceManager;
   private namespace: NetworkNamespace;
-  private syncTimer?: NodeJS.Timeout;
+  private syncTimer?: number;
   private messageHandlers: Map<MessageType, (message: PeerMessage) => void>;
 
   constructor(config: CollaborationConfig) {
@@ -68,7 +68,7 @@ export class CollaborationEngine extends EventEmitter {
 
     this.syncTimer = setInterval(() => {
       this.syncWithPeers();
-    }, this.config.syncInterval);
+    }, this.config.syncInterval) as unknown as number;
   }
 
   /**
