@@ -14,6 +14,8 @@ export interface MatchmakingConfig {
   namespace?: string;
   /** Custom matching criteria */
   matchCriteria?: MatchCriteria;
+  /** PeerPigeon mesh instance for automatic peer discovery */
+  mesh?: any; // PeerPigeonMesh instance
 }
 
 /**
@@ -120,6 +122,8 @@ export interface CollaborationConfig {
   conflictResolution?: ConflictResolutionStrategy;
   /** Sync interval in milliseconds */
   syncInterval?: number;
+  /** PeerPigeon mesh instance for automatic peer discovery */
+  mesh?: any; // PeerPigeonMesh instance
 }
 
 /**

@@ -6,6 +6,7 @@ The matchmaking and collaboration engine for PeerPigeon - a versatile solution f
 
 - 🎮 **Flexible Matchmaking**: Configure minimum and maximum peer counts (2 or more peers)
 - 🌐 **Network Namespace Support**: Uses PeerPigeon's native namespace isolation for separate peer networks
+- 🕸️ **Mesh Peer Discovery**: Automatically tracks both direct and indirect peers throughout the mesh via gossip protocol
 - ⏱️ **Vector Clock Arbitration**: Resolve conflicts and handle latency issues in distributed systems
 - 🔄 **State Synchronization**: Automatic state synchronization across peers
 - ⚡ **Vue/Vite Compatible**: Built with Vue 3 and Vite support by default
@@ -19,17 +20,28 @@ npm install pigeonmatch
 
 ## Quick Start
 
-### Matchmaking Engine
+### Matchmaking Engine with PeerPigeon Integration
 
 ```typescript
+import { PeerPigeonMesh } from 'peerpigeon';
 import { MatchmakingEngine, MatchmakingEvent } from 'pigeonmatch';
 
-// Create a matchmaking engine
+// Create PeerPigeon mesh instance
+const mesh = new PeerPigeonMesh({ 
+  networkName: 'game-lobby',
+  enableWebDHT: true 
+});
+await mesh.init();
+await mesh.connect('ws://localhost:3000');
+
+// Create a matchmaking engine with mesh integration
+// Automatically tracks ALL peers (direct + indirect) in the mesh via gossip protocol
 const matchmaker = new MatchmakingEngine({
   minPeers: 2,      // Minimum peers required for a match
   maxPeers: 4,      // Maximum peers in a match
   namespace: 'game-lobby',
-  matchTimeout: 30000
+  matchTimeout: 30000,
+  mesh: mesh        // Enables automatic peer discovery
 });
 
 // Listen for match events
@@ -41,29 +53,36 @@ matchmaker.on(MatchmakingEvent.PEER_JOINED, (peer) => {
   console.log('Peer joined:', peer);
 });
 
-// Add peers to the matchmaking pool
+// Peers are automatically discovered from the mesh!
+// You can also manually add peers with custom metadata
 matchmaker.addPeer({
   id: 'peer-1',
   metadata: { skill: 'advanced' }
 });
-
-matchmaker.addPeer({
-  id: 'peer-2',
-  metadata: { skill: 'advanced' }
-});
 ```
 
-### Collaboration Engine
+### Collaboration Engine with PeerPigeon Integration
 
 ```typescript
+import { PeerPigeonMesh } from 'peerpigeon';
 import { CollaborationEngine, CollaborationEvent, ConflictResolutionStrategy } from 'pigeonmatch';
 
-// Create a collaboration engine
+// Create PeerPigeon mesh instance
+const mesh = new PeerPigeonMesh({ 
+  networkName: 'document-collaboration',
+  enableWebDHT: true 
+});
+await mesh.init();
+await mesh.connect('ws://localhost:3000');
+
+// Create a collaboration engine with mesh integration
+// Automatically tracks ALL peers (direct + indirect) and handles message passing
 const collaboration = new CollaborationEngine({
-  peerId: 'my-peer-id',
+  peerId: mesh.getStatus().peerId,
   namespace: 'document-collaboration',
   conflictResolution: ConflictResolutionStrategy.VECTOR_CLOCK,
-  syncInterval: 5000
+  syncInterval: 5000,
+  mesh: mesh        // Enables automatic peer discovery and message passing
 });
 
 // Listen for state updates
@@ -76,7 +95,7 @@ collaboration.on(CollaborationEvent.CONFLICT_RESOLVED, (resolution) => {
   console.log('Conflict resolved:', resolution);
 });
 
-// Update local state
+// Update local state - automatically synced with all peers in the mesh
 collaboration.updateState({
   documentText: 'Hello, world!',
   cursor: { line: 1, column: 0 }
@@ -143,6 +162,55 @@ const chatMatchmaker = new MatchmakingEngine({
 // Peers in different PeerPigeon meshes won't see each other
 ```
 
+## Mesh Integration & Indirect Peer Tracking
+
+PigeonMatch integrates deeply with PeerPigeon's mesh networking to automatically track **all peers in the network**, including:
+
+- **Direct Peers**: Peers with direct WebRTC connections
+- **Indirect Peers**: Peers discovered through PeerPigeon's gossip protocol
+
+### How It Works
+
+When you provide a `mesh` parameter to the engines:
+
+1. **Automatic Discovery**: The engine listens to PeerPigeon's `peerDiscovered` events to track ALL peers in the mesh, not just those directly connected
+2. **Gossip Protocol**: PeerPigeon's gossip protocol ensures peer information propagates throughout the entire mesh
+3. **Dynamic Updates**: As peers join/leave the mesh, the engines automatically update their peer lists
+4. **Message Routing**: Messages are automatically routed through the mesh, reaching indirect peers via relay
+
+### Example: Tracking Indirect Peers
+
+```typescript
+// In a mesh with 10 peers where:
+// - Peer A is directly connected to Peers B and C
+// - Peer D is only connected to Peer C (indirect to Peer A)
+
+const mesh = new PeerPigeonMesh({ networkName: 'game' });
+await mesh.connect('ws://localhost:3000');
+
+const matchmaker = new MatchmakingEngine({
+  minPeers: 4,
+  maxPeers: 8,
+  mesh: mesh  // Enables mesh integration
+});
+
+// Peer A's matchmaker will automatically track:
+// - Peer B (direct)
+// - Peer C (direct)
+// - Peer D (indirect via C)
+// - All other discovered peers in the mesh
+
+// When a match is created, it can include ANY combination of peers,
+// whether directly or indirectly connected
+```
+
+### Benefits
+
+- **Scalability**: Match across the entire mesh, not just direct connections
+- **Resilience**: Peers can communicate even when not directly connected
+- **Simplicity**: No manual peer tracking required
+- **Efficiency**: Leverages PeerPigeon's optimized routing and gossip protocol
+
 ## API Reference
 
 ### MatchmakingEngine
@@ -156,8 +224,11 @@ interface MatchmakingConfig {
   matchTimeout?: number;   // Timeout in milliseconds
   namespace?: string;      // Network namespace
   matchCriteria?: object;  // Custom matching criteria
+  mesh?: any;              // PeerPigeonMesh instance for auto peer discovery
 }
 ```
+
+**Note**: When `mesh` is provided, peers are automatically discovered from the mesh. You can still manually add peers with custom metadata using `addPeer()`.
 
 #### Methods
 
@@ -187,8 +258,11 @@ interface CollaborationConfig {
   namespace?: string;                // Network namespace
   conflictResolution?: ConflictResolutionStrategy;
   syncInterval?: number;             // Sync interval in ms
+  mesh?: any;                        // PeerPigeonMesh instance for auto peer discovery and messaging
 }
 ```
+
+**Note**: When `mesh` is provided, peers are automatically discovered and messages are automatically sent through the mesh network.
 
 #### Methods
 

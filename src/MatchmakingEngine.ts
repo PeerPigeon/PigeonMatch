@@ -10,9 +10,9 @@ import {
 /**
  * MatchmakingEngine handles peer matching and group formation
  * 
- * Note: For network namespace isolation, create separate PeerPigeon mesh instances
- * with different `networkName` configurations. This engine manages peer matching
- * within a single namespace.
+ * Integrates with PeerPigeon mesh to automatically track both direct and indirect peers.
+ * When a mesh instance is provided, the engine will discover and track all peers in the
+ * network via PeerPigeon's gossip protocol.
  */
 export class MatchmakingEngine extends EventEmitter {
   private config: Required<MatchmakingConfig>;
@@ -20,6 +20,7 @@ export class MatchmakingEngine extends EventEmitter {
   private matches: Map<string, MatchGroup>;
   private matchQueue: Peer[];
   private matchCounter: number;
+  private mesh?: any; // PeerPigeonMesh instance
 
   constructor(config: MatchmakingConfig) {
     super();
@@ -28,13 +29,93 @@ export class MatchmakingEngine extends EventEmitter {
       maxPeers: config.maxPeers,
       matchTimeout: config.matchTimeout || 30000,
       namespace: config.namespace || 'default',
-      matchCriteria: config.matchCriteria || {}
+      matchCriteria: config.matchCriteria || {},
+      mesh: config.mesh
     };
 
     this.peers = new Map();
     this.matches = new Map();
     this.matchQueue = [];
     this.matchCounter = 0;
+    this.mesh = config.mesh;
+
+    // If mesh is provided, set up automatic peer discovery
+    if (this.mesh) {
+      this.setupMeshIntegration();
+    }
+  }
+
+  /**
+   * Set up integration with PeerPigeon mesh for automatic peer tracking
+   */
+  private setupMeshIntegration(): void {
+    if (!this.mesh) return;
+
+    // Track discovered peers (including indirect peers via gossip)
+    this.mesh.on('peerDiscovered', ({ peerId }: { peerId: string }) => {
+      if (!this.peers.has(peerId)) {
+        this.addPeer({
+          id: peerId,
+          metadata: {},
+          joinedAt: Date.now()
+        });
+      }
+    });
+
+    // Track directly connected peers
+    this.mesh.on('peerConnected', ({ peerId }: { peerId: string }) => {
+      if (!this.peers.has(peerId)) {
+        this.addPeer({
+          id: peerId,
+          metadata: {},
+          joinedAt: Date.now()
+        });
+      }
+    });
+
+    // Handle peer disconnection
+    this.mesh.on('peerDisconnected', ({ peerId }: { peerId: string }) => {
+      this.removePeer(peerId);
+    });
+
+    // Sync existing peers if mesh is already connected
+    this.syncMeshPeers();
+  }
+
+  /**
+   * Sync all existing peers from the mesh
+   */
+  private syncMeshPeers(): void {
+    if (!this.mesh) return;
+
+    try {
+      // Get all discovered peers (includes indirect peers)
+      const discoveredPeers = this.mesh.getDiscoveredPeers?.() || [];
+      for (const peerId of discoveredPeers) {
+        if (!this.peers.has(peerId)) {
+          this.addPeer({
+            id: peerId,
+            metadata: {},
+            joinedAt: Date.now()
+          });
+        }
+      }
+
+      // Also get directly connected peers
+      const connectedPeers = this.mesh.getPeers?.() || [];
+      for (const peerId of connectedPeers) {
+        if (!this.peers.has(peerId)) {
+          this.addPeer({
+            id: peerId,
+            metadata: {},
+            joinedAt: Date.now()
+          });
+        }
+      }
+    } catch (error) {
+      // Silently handle if methods don't exist
+      console.warn('Failed to sync mesh peers:', error);
+    }
   }
 
   /**

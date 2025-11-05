@@ -14,9 +14,9 @@ import {
 /**
  * CollaborationEngine handles state synchronization and conflict resolution
  * 
- * Note: For network namespace isolation, create separate PeerPigeon mesh instances
- * with different `networkName` configurations. This engine manages collaboration
- * within a single namespace.
+ * Integrates with PeerPigeon mesh to automatically track both direct and indirect peers.
+ * When a mesh instance is provided, the engine will discover and track all peers in the
+ * network via PeerPigeon's gossip protocol.
  */
 export class CollaborationEngine extends EventEmitter {
   private config: Required<CollaborationConfig>;
@@ -27,6 +27,7 @@ export class CollaborationEngine extends EventEmitter {
   private peers: Map<string, Peer>;
   private syncTimer?: number;
   private messageHandlers: Map<MessageType, (message: PeerMessage) => void>;
+  private mesh?: any; // PeerPigeonMesh instance
 
   constructor(config: CollaborationConfig) {
     super();
@@ -34,7 +35,8 @@ export class CollaborationEngine extends EventEmitter {
       peerId: config.peerId,
       namespace: config.namespace || 'default',
       conflictResolution: config.conflictResolution || ConflictResolutionStrategy.VECTOR_CLOCK,
-      syncInterval: config.syncInterval || 5000
+      syncInterval: config.syncInterval || 5000,
+      mesh: config.mesh
     };
 
     this.localClock = new VectorClock();
@@ -43,9 +45,96 @@ export class CollaborationEngine extends EventEmitter {
     this.peerStates = new Map();
     this.peers = new Map();
     this.messageHandlers = new Map();
+    this.mesh = config.mesh;
 
     this.setupMessageHandlers();
     this.startSyncTimer();
+
+    // If mesh is provided, set up automatic peer discovery
+    if (this.mesh) {
+      this.setupMeshIntegration();
+    }
+  }
+
+  /**
+   * Set up integration with PeerPigeon mesh for automatic peer tracking
+   */
+  private setupMeshIntegration(): void {
+    if (!this.mesh) return;
+
+    // Track discovered peers (including indirect peers via gossip)
+    this.mesh.on('peerDiscovered', ({ peerId }: { peerId: string }) => {
+      if (peerId !== this.config.peerId && !this.peers.has(peerId)) {
+        this.addPeer({
+          id: peerId,
+          metadata: {},
+          joinedAt: Date.now()
+        });
+      }
+    });
+
+    // Track directly connected peers
+    this.mesh.on('peerConnected', ({ peerId }: { peerId: string }) => {
+      if (peerId !== this.config.peerId && !this.peers.has(peerId)) {
+        this.addPeer({
+          id: peerId,
+          metadata: {},
+          joinedAt: Date.now()
+        });
+      }
+    });
+
+    // Handle peer disconnection
+    this.mesh.on('peerDisconnected', ({ peerId }: { peerId: string }) => {
+      this.removePeer(peerId);
+    });
+
+    // Handle incoming messages from mesh
+    this.mesh.on('messageReceived', ({ content }: { from: string; content: any }) => {
+      // Check if message is for this collaboration engine
+      if (content && content._pigeonmatch && content.namespace === this.config.namespace) {
+        this.handleMessage(content as PeerMessage);
+      }
+    });
+
+    // Sync existing peers if mesh is already connected
+    this.syncMeshPeers();
+  }
+
+  /**
+   * Sync all existing peers from the mesh
+   */
+  private syncMeshPeers(): void {
+    if (!this.mesh) return;
+
+    try {
+      // Get all discovered peers (includes indirect peers)
+      const discoveredPeers = this.mesh.getDiscoveredPeers?.() || [];
+      for (const peerId of discoveredPeers) {
+        if (peerId !== this.config.peerId && !this.peers.has(peerId)) {
+          this.addPeer({
+            id: peerId,
+            metadata: {},
+            joinedAt: Date.now()
+          });
+        }
+      }
+
+      // Also get directly connected peers
+      const connectedPeers = this.mesh.getPeers?.() || [];
+      for (const peerId of connectedPeers) {
+        if (peerId !== this.config.peerId && !this.peers.has(peerId)) {
+          this.addPeer({
+            id: peerId,
+            metadata: {},
+            joinedAt: Date.now()
+          });
+        }
+      }
+    } catch (error) {
+      // Silently handle if methods don't exist
+      console.warn('Failed to sync mesh peers:', error);
+    }
   }
 
   /**
@@ -340,12 +429,29 @@ export class CollaborationEngine extends EventEmitter {
 
   /**
    * Send a message to a specific peer
-   * This is a placeholder - actual implementation depends on peerpigeon integration
+   * Uses PeerPigeon mesh if available, otherwise emits event for manual handling
    */
   private sendMessage(message: PeerMessage): void {
-    // In a real implementation, this would use peerpigeon to send the message
-    // For now, we emit an event that can be handled by the integrating application
-    this.emit('message:send', message);
+    // Mark message as coming from PigeonMatch for identification
+    const pigeonmatchMessage = {
+      ...message,
+      _pigeonmatch: true,
+      namespace: this.config.namespace
+    };
+
+    if (this.mesh) {
+      // Use PeerPigeon mesh to send message
+      if (message.to) {
+        // Send to specific peer
+        this.mesh.sendDirectMessage(message.to, pigeonmatchMessage);
+      } else {
+        // Broadcast to all peers
+        this.mesh.sendMessage(pigeonmatchMessage);
+      }
+    } else {
+      // Emit event for manual handling when mesh is not available
+      this.emit('message:send', pigeonmatchMessage);
+    }
   }
 
   /**
