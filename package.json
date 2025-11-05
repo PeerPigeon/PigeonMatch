@@ -1,0 +1,47 @@
+{
+  "name": "pigeonmatch",
+  "version": "1.0.0",
+  "description": "The matchmaking and collaboration engine for PeerPigeon",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "peer-to-peer",
+    "matchmaking",
+    "collaboration",
+    "peerpigeon",
+    "vector-clock",
+    "distributed-systems"
+  ],
+  "author": "",
+  "license": "ISC",
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "vite": "^5.0.0",
+    "vue": "^3.3.0"
+  },
+  "dependencies": {
+    "eventemitter3": "^5.0.1",
+    "peerpigeon": "^1.0.0"
+  }
+}
