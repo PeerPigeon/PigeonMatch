@@ -350,7 +350,7 @@ PigeonMatch uses a combination of proven distributed systems concepts:
 
 ## License
 
-ISC
+MIT
 
 ## Contributing
 

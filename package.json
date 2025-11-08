@@ -34,7 +34,7 @@
     "distributed-systems"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "peerDependencies": {
     "vue": "^3.0.0"
   },
