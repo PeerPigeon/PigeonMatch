@@ -1,6 +1,6 @@
 {
   "name": "pigeonmatch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The matchmaking and collaboration engine for PeerPigeon",
   "type": "module",
   "main": "./dist/index.js",
