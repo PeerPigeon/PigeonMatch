@@ -51,6 +51,6 @@
   },
   "dependencies": {
     "eventemitter3": "^5.0.1",
-    "peerpigeon": "^1.0.6"
+    "peerpigeon": "^1.1.3"
   }
 }
